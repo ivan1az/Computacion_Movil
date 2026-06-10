@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "757553481595",
-    "firebase_url": "https://comesolo-uacm-default-rtdb.firebaseio.com",
-    "project_id": "comesolo-uacm",
-    "storage_bucket": "comesolo-uacm.firebasestorage.app"
+    "project_number": "518303114460",
+    "project_id": "come-solo-juego",
+    "storage_bucket": "come-solo-juego.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:757553481595:android:08d6f23de9600f86899fde",
+        "mobilesdk_app_id": "1:518303114460:android:3d426fa4b0cb54d85e0019",
         "android_client_info": {
           "package_name": "com.example.comesolo_flutter"
         }
@@ -16,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDTuO3fEn5T_KrEkz0nYTALiV_OrklUGHs"
+          "current_key": "AIzaSyCtMOuHljaleFj9gp6Y7TSn3nHmZwGi5Z8"
         }
       ],
       "services": {

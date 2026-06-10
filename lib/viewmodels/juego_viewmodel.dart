@@ -1,114 +1,89 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../modelo/celda.dart';
 import '../modelo/tablero.dart';
 import '../modelo/juego_state.dart';
+import '../servicios/firebase_servicio.dart';
 
-// VIEWMODEL: JuegoViewModel
-// Contiene toda la lógica del juego Come Solo.
-// La View solo lee estado y llama funciones, nunca decide lógica.
 class JuegoViewModel extends ChangeNotifier {
+  static const int _maxHistorial = 5;
 
-  // El tablero del juego
+  static const List<List<int>> _direcciones = [
+    [2, 0], [-2, 0],
+    [0, 2], [0, -2],
+    [2, 2], [-2, -2],
+  ];
+
+  final FirebaseServicio _servicio;
+
   Tablero _tablero = Tablero();
-
-  // Celda actualmente seleccionada por el jugador (null si ninguna)
   Celda? celdaSeleccionada;
-
-  // Estado actual del juego
   EstadoJuego estado = EstadoJuego.jugando;
-
-  // Historial de estados para deshacer (patrón Memento)
-  // Cada entrada es una copia del tablero antes de un movimiento
-  final List<List<List<Celda?>>> _historial = [];
-  final int maxHistorial = 5; // máximo de movimientos a deshacer
-
-  // Contador de movimientos realizados
-  int contadorMovimientos = 0;
-
-  // Sugerencia activa (coordenadas origen y destino)
   List<int>? sugerencia;
+  int contadorMovimientos = 0;
+  String _nombreJugador = '';
 
-  // Getter para acceder al tablero desde la View
+  final List<List<List<Celda?>>> _historial = [];
+
+  // Permite inyectar un servicio falso en tests
+  JuegoViewModel({FirebaseServicio? servicio})
+      : _servicio = servicio ?? FirebaseServicio();
+
   Tablero get tablero => _tablero;
+  bool get puedeDeshacer => _historial.isNotEmpty;
+  Stream<List<Map<String, dynamic>>> get puntuaciones => _servicio.getPuntuaciones();
 
-  // Constructor: inicializa el tablero
-  JuegoViewModel() {
-    _tablero.inicializar();
+  void iniciarPartida(String nombre, int huecoFila, int huecoCol) {
+    _nombreJugador = nombre;
+    _tablero.inicializarHueco(huecoFila, huecoCol);
+    _servicio.logInicioPartida(nombre);
+    notifyListeners();
   }
 
-  // RF02: El jugador elige dónde empieza el hueco
-  void inicializarHueco(int f, int c) {
-    _tablero.inicializarHueco(f, c);
-    notifyListeners(); // avisa a la View que cambiaron los datos
-  }
-
-  // RF03: Reinicia el juego completamente
   void reiniciar() {
     _tablero = Tablero();
     celdaSeleccionada = null;
     estado = EstadoJuego.jugando;
-    _historial.clear();
     contadorMovimientos = 0;
     sugerencia = null;
+    _historial.clear();
     notifyListeners();
   }
 
-  // Maneja el toque del usuario sobre una celda
-  // Si no hay celda seleccionada, selecciona la tocada
-  // Si ya hay una seleccionada, intenta mover
-  void onCeldaTocada(int f, int c) {
-    final celda = _tablero.matriz[f][c];
-    if (celda == null) return; // celda fuera del tablero
+  void onCeldaTocada(int fila, int col) {
+    final celda = _tablero.matriz[fila][col];
+    if (celda == null) return;
 
     if (celdaSeleccionada == null) {
-      // Primera selección: solo puede seleccionar celdas con pieza
       if (celda.ocupada) {
         celdaSeleccionada = celda;
-        sugerencia = null; // quita sugerencia al tocar
-        notifyListeners();
-      }
-    } else {
-      // Segunda selección: intenta mover
-      final origen = celdaSeleccionada!;
-      if (origen.fila == f && origen.col == c) {
-        // Tocó la misma celda: deselecciona
-        celdaSeleccionada = null;
-        notifyListeners();
-        return;
-      }
-
-      if (_tablero.validarMovimiento(origen.fila, origen.col, f, c)) {
-        // Guarda el estado actual en el historial ANTES de mover
-        _guardarEnHistorial();
-        // Ejecuta el movimiento
-        _tablero.mover(origen.fila, origen.col, f, c);
-        contadorMovimientos++;
-        celdaSeleccionada = null;
         sugerencia = null;
-        // Verifica si el juego terminó
-        _verificarEstado();
         notifyListeners();
-      } else {
-        // Movimiento inválido: si tocó otra pieza, la selecciona
-        if (celda.ocupada) {
-          celdaSeleccionada = celda;
-          notifyListeners();
-        }
       }
+      return;
+    }
+
+    final origen = celdaSeleccionada!;
+
+    if (origen.fila == fila && origen.col == col) {
+      celdaSeleccionada = null;
+      notifyListeners();
+      return;
+    }
+
+    if (_tablero.validarMovimiento(origen.fila, origen.col, fila, col)) {
+      _guardarEnHistorial();
+      _tablero.mover(origen.fila, origen.col, fila, col);
+      contadorMovimientos++;
+      celdaSeleccionada = null;
+      sugerencia = null;
+      _actualizarEstado();
+      notifyListeners();
+    } else if (celda.ocupada) {
+      celdaSeleccionada = celda;
+      notifyListeners();
     }
   }
 
-  // Guarda copia del tablero en el historial (patrón Memento)
-  void _guardarEnHistorial() {
-    _historial.add(_tablero.copiarMatriz());
-    // Mantiene solo el máximo permitido
-    if (_historial.length > maxHistorial) {
-      _historial.removeAt(0);
-    }
-  }
-
-  // RF04: Deshace el último movimiento
-  // También se activa cuando el usuario agita el celular
   bool deshacer() {
     if (_historial.isEmpty) return false;
     _tablero.matriz = _historial.removeLast();
@@ -116,78 +91,62 @@ class JuegoViewModel extends ChangeNotifier {
     celdaSeleccionada = null;
     estado = EstadoJuego.jugando;
     sugerencia = null;
+    _servicio.logDeshacer();
     notifyListeners();
     return true;
   }
 
-  // RF08: Verifica si quedan movimientos disponibles
-  void _verificarEstado() {
-    if (!hayMovimientos()) {
-      estado = EstadoJuego.terminado;
-    } else {
-      estado = EstadoJuego.jugando;
-    }
-  }
-
-  // Revisa todas las celdas para ver si alguna tiene movimiento válido
-  bool hayMovimientos() {
-    List<List<int>> dirs = [
-      [2,0],[-2,0],[0,2],[0,-2],[2,2],[-2,-2]
-    ];
-    for (int i = 0; i < 5; i++) {
-      for (int j = 0; j < 5; j++) {
-        if (_tablero.matriz[i][j] != null && _tablero.matriz[i][j]!.ocupada) {
-          for (var d in dirs) {
-            int ni = i + d[0];
-            int nj = j + d[1];
-            if (ni >= 0 && nj >= 0 && ni < 5 && nj < 5) {
-              if (_tablero.validarMovimiento(i, j, ni, nj)) return true;
-            }
-          }
-        }
-      }
-    }
-    return false;
-  }
-
-  // Sugiere un movimiento válido al jugador
   void sugerirMovimiento() {
-    List<List<int>> dirs = [
-      [2,0],[-2,0],[0,2],[0,-2],[2,2],[-2,-2]
-    ];
-    for (int i = 0; i < 5; i++) {
-      for (int j = 0; j < 5; j++) {
-        if (_tablero.matriz[i][j] != null && _tablero.matriz[i][j]!.ocupada) {
-          for (var d in dirs) {
-            int ni = i + d[0];
-            int nj = j + d[1];
-            if (ni >= 0 && nj >= 0 && ni < 5 && nj < 5) {
-              if (_tablero.validarMovimiento(i, j, ni, nj)) {
-                sugerencia = [i, j, ni, nj];
-                notifyListeners();
-                return;
-              }
-            }
-          }
-        }
-      }
-    }
+    final movimiento = _buscarPrimerMovimiento();
+    sugerencia = movimiento;
+    if (movimiento != null) _servicio.logSugerencia();
+    notifyListeners();
   }
 
-  // Cuenta las piezas restantes (para la puntuación)
-  // Menos piezas = mejor puntuación
   int contarPiezas() {
-    int cuenta = 0;
+    int total = 0;
     for (int i = 0; i < 5; i++) {
       for (int j = 0; j <= i; j++) {
-        if (_tablero.matriz[i][j] != null && _tablero.matriz[i][j]!.ocupada) {
-          cuenta++;
+        if (_tablero.matriz[i][j]?.ocupada == true) total++;
+      }
+    }
+    return total;
+  }
+
+  // --- Privados ---
+
+  void _guardarEnHistorial() {
+    _historial.add(_tablero.copiarMatriz());
+    if (_historial.length > _maxHistorial) _historial.removeAt(0);
+  }
+
+  void _actualizarEstado() {
+    final siguienteMovimiento = _buscarPrimerMovimiento();
+    estado = siguienteMovimiento != null
+        ? EstadoJuego.jugando
+        : EstadoJuego.terminado;
+
+    if (estado == EstadoJuego.terminado) {
+      // fire-and-forget: no bloqueamos la UI esperando a Firebase
+      _servicio.guardarPuntuacion(_nombreJugador, contarPiezas(), contadorMovimientos);
+    }
+  }
+
+  // Único método que itera el tablero buscando movimientos válidos.
+  // Reemplaza la antigua duplicación entre hayMovimientos() y sugerirMovimiento().
+  List<int>? _buscarPrimerMovimiento() {
+    for (int i = 0; i < 5; i++) {
+      for (int j = 0; j < 5; j++) {
+        if (_tablero.matriz[i][j]?.ocupada != true) continue;
+        for (final d in _direcciones) {
+          final ni = i + d[0];
+          final nj = j + d[1];
+          if (ni >= 0 && nj >= 0 && ni < 5 && nj < 5) {
+            if (_tablero.validarMovimiento(i, j, ni, nj)) return [i, j, ni, nj];
+          }
         }
       }
     }
-    return cuenta;
+    return null;
   }
-
-  // Indica si hay movimientos en el historial para deshacer
-  bool get puedeDeshacer => _historial.isNotEmpty;
 }

@@ -3,9 +3,6 @@ import 'package:provider/provider.dart';
 import '../viewmodels/juego_viewmodel.dart';
 import 'juego_screen.dart';
 
-// VISTA: InicioScreen
-// Pantalla de bienvenida donde el jugador ingresa su nombre
-// y elige dónde empieza el hueco del tablero.
 class InicioScreen extends StatefulWidget {
   const InicioScreen({super.key});
 
@@ -15,9 +12,33 @@ class InicioScreen extends StatefulWidget {
 
 class _InicioScreenState extends State<InicioScreen> {
   final _nombreController = TextEditingController();
-  // Hueco seleccionado (fila, col) — por defecto el centro
   int _huecoFila = 2;
   int _huecoCol = 1;
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    super.dispose();
+  }
+
+  void _iniciarJuego() {
+    final nombre = _nombreController.text.trim();
+    if (nombre.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa tu nombre')),
+      );
+      return;
+    }
+
+    context.read<JuegoViewModel>().iniciarPartida(nombre, _huecoFila, _huecoCol);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JuegoScreen(nombreJugador: nombre),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +50,6 @@ class _InicioScreenState extends State<InicioScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Título
               const Text(
                 'COME\nSOLO',
                 textAlign: TextAlign.center,
@@ -46,8 +66,6 @@ class _InicioScreenState extends State<InicioScreen> {
                 style: TextStyle(color: Colors.white54, fontSize: 14),
               ),
               const SizedBox(height: 40),
-
-              // Campo de nombre
               TextField(
                 controller: _nombreController,
                 style: const TextStyle(color: Colors.white),
@@ -66,17 +84,20 @@ class _InicioScreenState extends State<InicioScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Selector de hueco inicial
               const Text(
                 'Elige el hueco inicial:',
                 style: TextStyle(color: Colors.white, fontSize: 16),
               ),
               const SizedBox(height: 12),
-              _construirSelectorHueco(),
+              _SelectorHueco(
+                huecoFila: _huecoFila,
+                huecoCol: _huecoCol,
+                onSeleccion: (fila, col) => setState(() {
+                  _huecoFila = fila;
+                  _huecoCol = col;
+                }),
+              ),
               const SizedBox(height: 32),
-
-              // Botón jugar
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -88,35 +109,19 @@ class _InicioScreenState extends State<InicioScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: () {
-                    final nombre = _nombreController.text.trim();
-                    if (nombre.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Ingresa tu nombre')),
-                      );
-                      return;
-                    }
-                    // Inicializa el hueco en el ViewModel
-                    context.read<JuegoViewModel>()
-                        .inicializarHueco(_huecoFila, _huecoCol);
-
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => JuegoScreen(nombreJugador: nombre),
-                      ),
-                    );
-                  },
-                  child: const Text('INICIAR JUEGO',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  onPressed: _iniciarJuego,
+                  child: const Text(
+                    'INICIAR JUEGO',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-
-              // Botón ver puntuaciones
               TextButton(
                 onPressed: () => Navigator.pushNamed(context, '/puntuaciones'),
-                child: const Text('Ver puntuaciones',
-                    style: TextStyle(color: Colors.white54)),
+                child: const Text(
+                  'Ver puntuaciones',
+                  style: TextStyle(color: Colors.white54),
+                ),
               ),
             ],
           ),
@@ -124,20 +129,29 @@ class _InicioScreenState extends State<InicioScreen> {
       ),
     );
   }
+}
 
-  // Mini tablero triangular para seleccionar el hueco inicial
-  Widget _construirSelectorHueco() {
+class _SelectorHueco extends StatelessWidget {
+  const _SelectorHueco({
+    required this.huecoFila,
+    required this.huecoCol,
+    required this.onSeleccion,
+  });
+
+  final int huecoFila;
+  final int huecoCol;
+  final void Function(int fila, int col) onSeleccion;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: List.generate(5, (fila) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(fila + 1, (col) {
-            final seleccionado = _huecoFila == fila && _huecoCol == col;
+            final seleccionado = huecoFila == fila && huecoCol == col;
             return GestureDetector(
-              onTap: () => setState(() {
-                _huecoFila = fila;
-                _huecoCol = col;
-              }),
+              onTap: () => onSeleccion(fila, col),
               child: Container(
                 margin: const EdgeInsets.all(3),
                 width: 36,

@@ -7,14 +7,10 @@ import 'vistas/inicio_screen.dart';
 import 'vistas/puntuaciones_screen.dart';
 
 void main() async {
-  // Necesario antes de usar Firebase o plugins
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inicializa Firebase con la configuración generada por FlutterFire CLI
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(
-    // MultiProvider registra todos los ViewModels disponibles para la app
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => JuegoViewModel()),
@@ -39,9 +35,7 @@ class ComeSoloApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // Pantalla inicial
       home: const InicioScreen(),
-      // Rutas nombradas para navegar entre pantallas
       routes: {
         '/puntuaciones': (_) => const PuntuacionesScreen(),
       },
